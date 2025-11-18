@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>B5H11 (nido) – 3D Model</title>
+  <style>
+    body {
+      margin: 0;
+      background-color: #000;
+      color: #eee;
+      font-family: Arial, sans-serif;
+      overflow: hidden;
+    }
+    #container {
+      width: 100vw;
+      height: 100vh;
+      position: relative;
+    }
+    #legend {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      background: rgba(0, 0, 0, 0.6);
+      padding: 10px 14px;
+      border-radius: 6px;
+      font-size: 14px;
+      border: 1px solid #555;
+      z-index: 10;
+    }
+    .legend-item {
+      display: flex;
+      align-items: center;
+      margin-bottom: 4px;
+    }
+    .legend-color {
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      margin-right: 6px;
+      border: 1px solid #333;
+    }
+  </style>
+</head>
+<body>
+  <div id="container">
+    <div id="legend">
+      <div><strong>Legend</strong></div>
+      <div class="legend-item">
+        <div class="legend-color" style="background:#87CEFA;"></div>
+        <span>Boron (B)</span>
+      </div>
+      <div class="legend-item">
+        <div class="legend-color" style="background:#FFFFFF;"></div>
+        <span>Hydrogen (H)</span>
+      </div>
+      <div class="legend-item">
+        <div class="legend-color" style="background:#888888;"></div>
+        <span>B–H &amp; B–B bonds</span>
+      </div>
+      <div style="margin-top:6px; font-size:12px; color:#ccc;">
+        B<sub>5</sub>H<sub>11</sub> (nido, idealized from octahedral B<sub>6</sub>)
+      </div>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/three@0.128.0/build/three.min.js"></script>
+  <script src="https://unpkg.com/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+
+  <script>
+    const container = document.getElementById('container');
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x000000);
+
+    const camera = new THREE.PerspectiveCamera(
+      45,
+      window.innerWidth / window.innerHeight,
+      0.1,
+      100
+    );
+    camera.position.set(4, 4, 4);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    container.appendChild(renderer.domElement);
+
+    const controls = new THREE.OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.08;
+
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+    scene.add(ambientLight);
+
+    const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+    dirLight.position.set(5, 5, 5);
+    scene.add(dirLight);
+
+    const boronMaterial = new THREE.MeshPhongMaterial({ color: 0x87CEFA });
+    const hydrogenMaterial = new THREE.MeshPhongMaterial({ color: 0xFFFFFF });
+    const bondMaterial = new THREE.MeshPhongMaterial({ color: 0x888888 });
+
+    const B_RADIUS = 0.20;
+    const H_RADIUS = 0.12;
+    const BOND_RADIUS = 0.05;
+
+    const boronGeom = new THREE.SphereGeometry(B_RADIUS, 32, 32);
+    const hydrogenGeom = new THREE.SphereGeometry(H_RADIUS, 32, 32);
+
+    function makeBond(start, end, radius, material) {
+      const dir = new THREE.Vector3().subVectors(end, start);
+      const len = dir.length();
+      const mid = new THREE.Vector3().addVectors(start, end).multiplyScalar(0.5);
+
+      const geom = new THREE.CylinderGeometry(radius, radius, len, 16, 1, true);
+      const mesh = new THREE.Mesh(geom, material);
+
+      const axis = new THREE.Vector3(0, 1, 0);
+      const quat = new THREE.Quaternion().setFromUnitVectors(axis, dir.clone().normalize());
+      mesh.quaternion.copy(quat);
+      mesh.position.copy(mid);
+
+      return mesh;
+    }
+
+    // B5 core: octahedron minus one vertex
+    const boronPositions = [
+      new THREE.Vector3( 1,  0,  0), // B0
+      new THREE.Vector3(-1,  0,  0), // B1
+      new THREE.Vector3( 0,  1,  0), // B2
+      new THREE.Vector3( 0, -1,  0), // B3
+      new THREE.Vector3( 0,  0,  1)  // B4
+    ];
+
+    const boronAtoms = [];
+    boronPositions.forEach(pos => {
+      const atom = new THREE.Mesh(boronGeom, boronMaterial);
+      atom.position.copy(pos);
+      scene.add(atom);
+      boronAtoms.push(atom);
+    });
+
+    // Skeletal B–B edges
+    const allEdgePairs = [
+      [0, 2], [0, 3], [0, 4],
+      [1, 2], [1, 3], [1, 4],
+      [2, 4], [3, 4]
+    ];
+
+    // Choose 6 bridging edges (same as before)
+    const bridgingEdges = [
+      [0, 2],
+      [0, 3],
+      [1, 2],
+      [1, 3],
+      [2, 4],
+      [3, 4]
+    ];
+
+    const bridgingSet = {};
+    bridgingEdges.forEach(([i, j]) => {
+      bridgingSet[`${i}-${j}`] = true;
+      bridgingSet[`${j}-${i}`] = true;
+    });
+
+    // Draw B–B bonds only on non-bridged edges (if any)
+    allEdgePairs.forEach(([i, j]) => {
+      if (bridgingSet[`${i}-${j}`]) return;
+      const bond = makeBond(boronPositions[i], boronPositions[j], BOND_RADIUS * 0.7, bondMaterial);
+      scene.add(bond);
+    });
+
+    const hydrogenAtoms = [];
+
+    // Terminal hydrogens: 5
+    const H_SCALE_TERMINAL = 1.4;
+    boronPositions.forEach(pos => {
+      const hPos = pos.clone().multiplyScalar(H_SCALE_TERMINAL);
+      const hAtom = new THREE.Mesh(hydrogenGeom, hydrogenMaterial);
+      hAtom.position.copy(hPos);
+      scene.add(hAtom);
+      hydrogenAtoms.push(hAtom);
+
+      const bond = makeBond(pos, hPos, BOND_RADIUS, bondMaterial);
+      scene.add(bond);
+    });
+
+    // Bridging hydrogens: 6, placed off the B–B line
+    const BRIDGE_OFFSET = 0.25;
+
+    bridgingEdges.forEach(([i, j]) => {
+      const Bi = boronPositions[i];
+      const Bj = boronPositions[j];
+
+      const mid = new THREE.Vector3().addVectors(Bi, Bj).multiplyScalar(0.5);
+      const edgeDir = new THREE.Vector3().subVectors(Bj, Bi).normalize();
+      const radial = mid.clone().normalize();
+
+      let offsetDir = new THREE.Vector3().crossVectors(edgeDir, radial);
+      if (offsetDir.lengthSq() < 1e-6) {
+        offsetDir = new THREE.Vector3(0, 0, 1).cross(edgeDir);
+      }
+      offsetDir.normalize();
+
+      const hPos = mid.clone().add(offsetDir.multiplyScalar(BRIDGE_OFFSET));
+
+      const hAtom = new THREE.Mesh(hydrogenGeom, hydrogenMaterial);
+      hAtom.position.copy(hPos);
+      scene.add(hAtom);
+      hydrogenAtoms.push(hAtom);
+
+      const bond1 = makeBond(Bi, hPos, BOND_RADIUS, bondMaterial);
+      const bond2 = makeBond(Bj, hPos, BOND_RADIUS, bondMaterial);
+      scene.add(bond1);
+      scene.add(bond2);
+    });
+
+    console.log("Number of hydrogens (expected 11):", hydrogenAtoms.length);
+
+    function animate() {
+      requestAnimationFrame(animate);
+      controls.update();
+      renderer.render(scene, camera);
+    }
+    animate();
+
+    window.addEventListener('resize', () => {
+      const width = window.innerWidth;
+      const height = window.innerHeight;
+      renderer.setSize(width, height);
+      camera.aspect = width / height;
+      camera.updateProjectionMatrix();
+    });
+  </script>
+</body>
+</html>
